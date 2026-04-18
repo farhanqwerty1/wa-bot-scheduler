@@ -1,4 +1,10 @@
 {
+  "name": "wa-bot-scheduler",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "fs-extra": "^11.3.4",
