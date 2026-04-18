@@ -6,7 +6,9 @@ app.get('/', (req, res) => {
 })
 
 const PORT = process.env.PORT || 3000
-app.listen(PORT)
+app.listen(PORT, () => {
+  console.log("🌐 Server running on port", PORT)
+})
 
 const makeWASocket = require('@whiskeysockets/baileys').default
 const {
@@ -18,6 +20,10 @@ const {
 const P = require('pino')
 const cron = require('node-cron')
 const fs = require('fs-extra')
+
+// =======================
+// FIX SESSION FOLDER (IMPORTANT)
+fs.ensureDirSync('./auth_info')
 
 // =======================
 const JADWAL_FILE = './jadwal.json'
@@ -88,7 +94,6 @@ function startScheduler(sock) {
 
         const key = `${item.id}-${now.date}-${item.jam}`
 
-        // ONCE
         if (item.type === 'once') {
           if (
             item.tanggal === now.date &&
@@ -98,13 +103,11 @@ function startScheduler(sock) {
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
-              text: `⏰ ONCE REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`,
-              mentions: item.mentions || []
+              text: `⏰ ONCE REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
             })
           }
         }
 
-        // DAILY
         if (item.type === 'daily') {
           if (
             now.minutes >= itemMinutes &&
@@ -113,8 +116,7 @@ function startScheduler(sock) {
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
-              text: `🔁 DAILY REMINDER\n⏰ ${item.jam}\n📌 ${item.kegiatan}`,
-              mentions: item.mentions || []
+              text: `🔁 DAILY REMINDER\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
             })
           }
         }
@@ -130,15 +132,14 @@ function startScheduler(sock) {
 // BOT START
 async function startBot() {
 
-  const { state, saveCreds } = await useMultiFileAuthState('session')
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_info')
   const { version } = await fetchLatestBaileysVersion()
 
   sockInstance = makeWASocket({
     version,
     auth: state,
     logger: P({ level: 'silent' }),
-    printQRInTerminal: false,
-    markOnlineOnConnect: true
+    printQRInTerminal: false
   })
 
   sockInstance.ev.on('creds.update', saveCreds)
@@ -151,7 +152,6 @@ async function startBot() {
 
     // =======================
     // PAIRING CODE (ONLY ONCE)
-    // =======================
     const phoneNumber = "6285772093943"
 
     if (!sockInstance._pairingSent) {
@@ -210,7 +210,7 @@ async function startBot() {
         })
       }
 
-      // =======================
+      // ONCE
       if (text.startsWith('/jadwal once')) {
 
         const parts = text.split(' ')
@@ -226,8 +226,7 @@ async function startBot() {
           tanggal,
           jam,
           kegiatan,
-          group: from,
-          mentions: []
+          group: from
         })
 
         await saveJadwal(data)
@@ -251,8 +250,7 @@ async function startBot() {
           type: 'daily',
           jam,
           kegiatan,
-          group: from,
-          mentions: []
+          group: from
         })
 
         await saveJadwal(data)
