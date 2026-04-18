@@ -144,17 +144,42 @@ async function startBot() {
   // =======================
   sock.ev.on('creds.update', saveCreds)
 
+  // =======================
   sock.ev.on('connection.update', async (update) => {
 
     const { connection, lastDisconnect } = update
 
     console.log("📡 STATUS:", connection)
 
+    // =======================
+    // PAIRING FIX (ANTI FAIL)
+    if (connection === 'connecting') {
+
+      if (!sock._pairingSent) {
+        sock._pairingSent = true
+
+        setTimeout(async () => {
+          try {
+            const phoneNumber = "6285772093943"
+
+            const code = await sock.requestPairingCode(phoneNumber)
+
+            console.log("🔥 PAIRING CODE:", code)
+
+          } catch (err) {
+            console.log("❌ Pairing error:", err)
+          }
+        }, 7000)
+      }
+    }
+
+    // =======================
     if (connection === 'open') {
       console.log('✅ BOT CONNECTED')
       startScheduler(sock)
     }
 
+    // =======================
     if (connection === 'close') {
 
       const reconnect =
@@ -173,7 +198,7 @@ async function startBot() {
   // =======================
   sock.ev.on('messages.upsert', async (m) => {
 
-    console.log("📩 MESSAGE EVENT TRIGGERED")
+    console.log("📩 MESSAGE IN")
 
     try {
 
@@ -200,20 +225,6 @@ async function startBot() {
       console.log('❌ ERROR:', err)
     }
   })
-
-  // =======================
-  // PAIRING CODE
-  setTimeout(async () => {
-    try {
-      const phoneNumber = "6285772093943"
-      const code = await sock.requestPairingCode(phoneNumber)
-
-      console.log("🔥 PAIRING CODE:", code)
-
-    } catch (err) {
-      console.log("❌ Pairing error:", err)
-    }
-  }, 5000)
 }
 
 // =======================
