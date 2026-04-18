@@ -189,15 +189,16 @@ async function startBot() {
   sockInstance.ev.on('creds.update', saveCreds)
 
   // =======================
-  sockInstance.ev.on('connection.update', (update) => {
+ const phoneNumber = "6285772093943" // ganti nomor kamu
 
-    const { connection, lastDisconnect, qr } = update
-
-    if (qr) {
-      console.log('📱 Scan QR:')
-      qrcode.generate(qr, { small: true })
-    }
-
+setTimeout(async () => {
+  try {
+    const code = await sockInstance.requestPairingCode(phoneNumber)
+    console.log("🔥 PAIRING CODE:", code)
+  } catch (err) {
+    console.log("❌ Pairing error:", err)
+  }
+}, 3000)
     if (connection === 'open') {
       console.log('✅ Bot connected!')
       startScheduler(sockInstance)
