@@ -7,7 +7,7 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log("🌐 Server running on", PORT)
+  console.log("🌐 Server running on port", PORT)
 })
 
 const makeWASocket = require('@whiskeysockets/baileys').default
@@ -100,7 +100,7 @@ function startScheduler(sock) {
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
-              text: `⏰ ONCE\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
+              text: `⏰ ONCE REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
             })
           }
         }
@@ -113,7 +113,7 @@ function startScheduler(sock) {
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
-              text: `🔁 DAILY\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
+              text: `🔁 DAILY REMINDER\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
             })
           }
         }
@@ -132,67 +132,48 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info')
   const { version } = await fetchLatestBaileysVersion()
 
-  sockInstance = makeWASocket({
+  const sock = makeWASocket({
     version,
     auth: state,
     logger: P({ level: 'silent' }),
     printQRInTerminal: false
   })
 
-  sockInstance.ev.on('creds.update', saveCreds)
-
-  sockInstance.ev.on('creds.update', () => {
-    console.log("💾 SESSION SAVED")
-  })
+  sockInstance = sock
 
   // =======================
-  sockInstance.ev.on('connection.update', (update) => {
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', async (update) => {
 
     const { connection, lastDisconnect } = update
 
-    console.log("📡 Connection:", connection)
+    console.log("📡 STATUS:", connection)
 
-    // =======================
-    if (!sockInstance._pairingSent) {
-      sockInstance._pairingSent = true
-
-      setTimeout(async () => {
-        try {
-          const phoneNumber = "6285772093943"
-          const code = await sockInstance.requestPairingCode(phoneNumber)
-
-          console.log("🔥 PAIRING CODE:", code)
-
-        } catch (err) {
-          console.log("❌ Pairing error:", err)
-        }
-      }, 3000)
-    }
-
-    // =======================
     if (connection === 'open') {
       console.log('✅ BOT CONNECTED')
-      startScheduler(sockInstance)
-      isRestarting = false
+      startScheduler(sock)
     }
 
     if (connection === 'close') {
-      const reconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+
+      const reconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
 
       sockInstance = null
 
       if (reconnect && !isRestarting) {
         isRestarting = true
-        console.log('🔄 Reconnect...')
+        console.log('🔄 RECONNECT...')
         setTimeout(startBot, 5000)
       }
     }
   })
 
   // =======================
-  sockInstance.ev.on('messages.upsert', async (m) => {
+  sock.ev.on('messages.upsert', async (m) => {
 
-    console.log("📩 MESSAGE IN")
+    console.log("📩 MESSAGE EVENT TRIGGERED")
 
     try {
 
@@ -210,15 +191,29 @@ async function startBot() {
       console.log("📨 TEXT:", text)
 
       if (text === 'Check') {
-        return await sockInstance.sendMessage(from, {
+        return await sock.sendMessage(from, {
           text: 'Alhamdulillah Sehat Pak Boss ✅'
         })
       }
 
     } catch (err) {
-      console.log('❌ MSG ERROR:', err)
+      console.log('❌ ERROR:', err)
     }
   })
+
+  // =======================
+  // PAIRING CODE
+  setTimeout(async () => {
+    try {
+      const phoneNumber = "6285772093943"
+      const code = await sock.requestPairingCode(phoneNumber)
+
+      console.log("🔥 PAIRING CODE:", code)
+
+    } catch (err) {
+      console.log("❌ Pairing error:", err)
+    }
+  }, 5000)
 }
 
 // =======================
