@@ -1,7 +1,6 @@
 const express = require('express')
 const app = express()
 
-
 app.get('/', (req, res) => {
   res.send('WA Bot aktif 🚀')
 })
@@ -17,7 +16,6 @@ const {
 } = require('@whiskeysockets/baileys')
 
 const P = require('pino')
-const qrcode = require('qrcode-terminal')
 const cron = require('node-cron')
 const fs = require('fs-extra')
 
@@ -29,7 +27,7 @@ let isRestarting = false
 const sentCache = new Set()
 
 // =======================
-// NORMALIZE JAM (AUTO DETECT FORMAT)
+// NORMALIZE JAM
 function normalizeJam(input) {
   if (!input) return null
 
@@ -48,7 +46,7 @@ function normalizeJam(input) {
 }
 
 // =======================
-// WIB FIX
+// WIB TIME
 function getWIBTime() {
   const now = new Date()
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000)
@@ -74,16 +72,13 @@ async function saveJadwal(data) {
 }
 
 // =======================
-// SCHEDULER (CATCH-UP SYSTEM)
+// SCHEDULER
 function startScheduler(sock) {
   cron.schedule('* * * * *', async () => {
     try {
 
       const now = getWIBTime()
       const data = await loadJadwal()
-
-      console.log('⏰ CHECK:', now.date, now.minutes)
-      console.log('📦 TOTAL:', data.length)
 
       for (let item of data) {
 
@@ -93,73 +88,32 @@ function startScheduler(sock) {
 
         const key = `${item.id}-${now.date}-${item.jam}`
 
-        // =======================
-        // ONCE (CATCH UP SAFE)
-        // =======================
+        // ONCE
         if (item.type === 'once') {
-
           if (
             item.tanggal === now.date &&
             now.minutes >= itemMinutes &&
             !sentCache.has(key)
           ) {
-
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
               text: `⏰ ONCE REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`,
               mentions: item.mentions || []
             })
-
-            // DM
-            for (let u of item.mentions || []) {
-              await sock.sendMessage(u, {
-                text: `🔔 REMINDER PRIBADI\n📌 ${item.kegiatan}\n⏰ ${item.jam}`
-              })
-            }
           }
         }
 
-        // =======================
-        // DAILY (EVERY DAY + CATCH UP)
-        // =======================
+        // DAILY
         if (item.type === 'daily') {
-
           if (
             now.minutes >= itemMinutes &&
             !sentCache.has(key)
           ) {
-
             sentCache.add(key)
 
             await sock.sendMessage(item.group, {
               text: `🔁 DAILY REMINDER\n⏰ ${item.jam}\n📌 ${item.kegiatan}`,
-              mentions: item.mentions || []
-            })
-
-            for (let u of item.mentions || []) {
-              await sock.sendMessage(u, {
-                text: `🔔 DAILY REMINDER\n📌 ${item.kegiatan}\n⏰ ${item.jam}`
-              })
-            }
-          }
-        }
-
-        // =======================
-        // LEGACY
-        // =======================
-        if (!item.type) {
-
-          if (
-            item.tanggal === now.date &&
-            now.minutes >= itemMinutes &&
-            !sentCache.has(key)
-          ) {
-
-            sentCache.add(key)
-
-            await sock.sendMessage(item.group, {
-              text: `⏰ REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`,
               mentions: item.mentions || []
             })
           }
@@ -190,16 +144,30 @@ async function startBot() {
   sockInstance.ev.on('creds.update', saveCreds)
 
   // =======================
- const phoneNumber = "6285772093943" // ganti nomor kamu
+  // CONNECTION
+  sockInstance.ev.on('connection.update', (update) => {
 
-setTimeout(async () => {
-  try {
-    const code = await sockInstance.requestPairingCode(phoneNumber)
-    console.log("🔥 PAIRING CODE:", code)
-  } catch (err) {
-    console.log("❌ Pairing error:", err)
-  }
-}, 3000)
+    const { connection, lastDisconnect } = update
+
+    // =======================
+    // PAIRING CODE (ONLY ONCE)
+    // =======================
+    const phoneNumber = "6285772093943"
+
+    if (!sockInstance._pairingSent) {
+      sockInstance._pairingSent = true
+
+      setTimeout(async () => {
+        try {
+          const code = await sockInstance.requestPairingCode(phoneNumber)
+          console.log("🔥 PAIRING CODE:", code)
+        } catch (err) {
+          console.log("❌ Pairing error:", err)
+        }
+      }, 3000)
+    }
+
+    // =======================
     if (connection === 'open') {
       console.log('✅ Bot connected!')
       startScheduler(sockInstance)
@@ -221,6 +189,7 @@ setTimeout(async () => {
   })
 
   // =======================
+  // MESSAGE HANDLER
   sockInstance.ev.on('messages.upsert', async (m) => {
 
     try {
@@ -235,10 +204,6 @@ setTimeout(async () => {
         msg.message.extendedTextMessage?.text ||
         ''
 
-      const mentionedJid =
-        msg.message.extendedTextMessage?.contextInfo?.mentionedJid || []
-
-      // =======================
       if (text === 'Check') {
         return sockInstance.sendMessage(from, {
           text: 'Alhamdulillah Sehat Pak Boss ✅'
@@ -246,7 +211,6 @@ setTimeout(async () => {
       }
 
       // =======================
-      // ONCE
       if (text.startsWith('/jadwal once')) {
 
         const parts = text.split(' ')
@@ -263,17 +227,16 @@ setTimeout(async () => {
           jam,
           kegiatan,
           group: from,
-          mentions: mentionedJid
+          mentions: []
         })
 
         await saveJadwal(data)
 
         return sockInstance.sendMessage(from, {
-          text: `✅ ONCE ditambahkan`
+          text: '✅ ONCE ditambahkan'
         })
       }
 
-      // =======================
       // DAILY
       if (text.startsWith('/jadwal daily')) {
 
@@ -289,56 +252,20 @@ setTimeout(async () => {
           jam,
           kegiatan,
           group: from,
-          mentions: mentionedJid
+          mentions: []
         })
 
         await saveJadwal(data)
 
         return sockInstance.sendMessage(from, {
-          text: `🔁 DAILY ditambahkan`
+          text: '🔁 DAILY ditambahkan'
         })
       }
 
-      // =======================
-      // LEGACY
-      if (text.startsWith('/jadwal tambah')) {
-
-        const now = getWIBTime()
-        const parts = text.split(' ')
-
-        const jam = normalizeJam(parts[2])
-        const kegiatan = parts.slice(3).join(' ')
-
-        const data = await loadJadwal()
-
-        data.push({
-          id: Date.now(),
-          type: 'once',
-          tanggal: now.date,
-          jam,
-          kegiatan,
-          group: from,
-          mentions: mentionedJid
-        })
-
-        await saveJadwal(data)
-
-        return sockInstance.sendMessage(from, {
-          text: `✅ Jadwal berhasil ditambahkan`
-        })
-      }
-
-      // =======================
       // LIHAT
       if (text === '/jadwal lihat') {
 
         const data = await loadJadwal()
-
-        if (!data.length) {
-          return sockInstance.sendMessage(from, {
-            text: '📭 kosong'
-          })
-        }
 
         let res = '📅 Jadwal:\n\n'
 
@@ -347,54 +274,6 @@ setTimeout(async () => {
         })
 
         return sockInstance.sendMessage(from, { text: res })
-      }
-	// =======================
-      // HAPUS JADWAL
-      // =======================
-      if (text.startsWith('/jadwal hapus')) {
-
-        let data = await loadJadwal()
-        const args = text.split(' ').slice(2)
-
-        if (!args.length) {
-          return sockInstance.sendMessage(from, {
-            text: '❌ Contoh:\n/jadwal hapus 1\n/jadwal hapus 1 3\n/jadwal hapus 2-4'
-          })
-        }
-
-        let indexes = []
-
-        for (let arg of args) {
-
-          if (arg.includes('-')) {
-            let [start, end] = arg.split('-').map(Number)
-
-            for (let i = start; i <= end; i++) {
-              indexes.push(i - 1)
-            }
-
-          } else {
-            indexes.push(parseInt(arg) - 1)
-          }
-        }
-
-        indexes = [...new Set(indexes)].sort((a, b) => b - a)
-
-        let removed = []
-
-        for (let i of indexes) {
-
-          if (i >= 0 && i < data.length && data[i].group === from) {
-            removed.push(data[i])
-            data.splice(i, 1)
-          }
-        }
-
-        await saveJadwal(data)
-
-        return sockInstance.sendMessage(from, {
-          text: `🗑️ ${removed.length} jadwal berhasil dihapus`
-        })
       }
 
     } catch (err) {
