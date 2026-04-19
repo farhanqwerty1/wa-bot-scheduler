@@ -1,10 +1,16 @@
 // =======================
-// EXPRESS (WAJIB DI RENDER)
+// EXPRESS (WAJIB RENDER)
 const express = require('express')
 const app = express()
+const path = require('path')
 
 app.get('/', (req, res) => {
   res.send('WA Bot aktif 🚀')
+})
+
+// 🔥 AKSES QR VIA BROWSER
+app.get('/qr', (req, res) => {
+  res.sendFile(path.join(__dirname, 'qr.png'))
 })
 
 const PORT = process.env.PORT || 3000
@@ -23,7 +29,7 @@ const {
 const P = require('pino')
 const cron = require('node-cron')
 const fs = require('fs-extra')
-const qrcode = require('qrcode-terminal')
+const QRCode = require('qrcode')
 
 // =======================
 fs.ensureDirSync('./auth_info')
@@ -149,7 +155,6 @@ async function startBot() {
     version,
     auth: state,
     logger: P({ level: 'silent' }),
-    printQRInTerminal: false,
 
     // 🔥 FIX RENDER
     keepAliveIntervalMs: 10000,
@@ -163,17 +168,18 @@ async function startBot() {
   sock.ev.on('creds.update', saveCreds)
 
   // =======================
-  sock.ev.on('connection.update', (update) => {
-
-    console.log('🧠 FULL UPDATE:', update)
+  sock.ev.on('connection.update', async (update) => {
 
     const { connection, lastDisconnect, qr } = update
     console.log('📡 STATUS:', connection)
 
-    // QR LOGIN
+    // 🔥 QR IMAGE (ANTI WRAP)
     if (qr) {
-      console.log('📱 SCAN QR:')
-      qrcode.generate(qr, { small: true })
+      console.log('📱 Generating QR...')
+
+      await QRCode.toFile('./qr.png', qr, { scale: 8 })
+
+      console.log('✅ QR ready: /qr')
     }
 
     // CONNECTED
@@ -202,7 +208,7 @@ async function startBot() {
   // AUTO CHECK SOCKET
   setInterval(() => {
     if (sock?.ws?.readyState !== 1) {
-      console.log('⚠️ Socket not ready, reconnecting...')
+      console.log('⚠️ Reconnecting socket...')
       startBot()
     }
   }, 20000)
