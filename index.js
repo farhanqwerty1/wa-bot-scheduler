@@ -1,3 +1,5 @@
+// =======================
+// EXPRESS (WAJIB DI RENDER)
 const express = require('express')
 const app = express()
 
@@ -10,6 +12,7 @@ app.listen(PORT, () => {
   console.log("🌐 Server running on port", PORT)
 })
 
+// =======================
 const makeWASocket = require('@whiskeysockets/baileys').default
 const {
   useMultiFileAuthState,
@@ -20,6 +23,7 @@ const {
 const P = require('pino')
 const cron = require('node-cron')
 const fs = require('fs-extra')
+const qrcode = require('qrcode-terminal')
 
 // =======================
 fs.ensureDirSync('./auth_info')
@@ -79,18 +83,22 @@ async function saveJadwal(data) {
 function startScheduler(sock) {
   cron.schedule('* * * * *', async () => {
     try {
-
       const now = getWIBTime()
       const data = await loadJadwal()
+
+      console.log('⏰ CHECK:', now.date, now.minutes)
 
       for (let item of data) {
 
         const jam = normalizeJam(item.jam)
+        if (!jam) continue
+
         const [h, m] = jam.split(':').map(Number)
         const itemMinutes = h * 60 + m
 
         const key = `${item.id}-${now.date}-${item.jam}`
 
+        // ONCE
         if (item.type === 'once') {
           if (
             item.tanggal === now.date &&
@@ -99,18 +107,23 @@ function startScheduler(sock) {
           ) {
             sentCache.add(key)
 
+            console.log('🔥 ONCE TRIGGER')
+
             await sock.sendMessage(item.group, {
               text: `⏰ ONCE REMINDER\n📅 ${item.tanggal}\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
             })
           }
         }
 
+        // DAILY
         if (item.type === 'daily') {
           if (
             now.minutes >= itemMinutes &&
             !sentCache.has(key)
           ) {
             sentCache.add(key)
+
+            console.log('🔥 DAILY TRIGGER')
 
             await sock.sendMessage(item.group, {
               text: `🔁 DAILY REMINDER\n⏰ ${item.jam}\n📌 ${item.kegiatan}`
@@ -136,7 +149,12 @@ async function startBot() {
     version,
     auth: state,
     logger: P({ level: 'silent' }),
-    printQRInTerminal: false
+    printQRInTerminal: false,
+
+    // 🔥 FIX RENDER
+    keepAliveIntervalMs: 10000,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 0
   })
 
   sockInstance = sock
@@ -146,38 +164,25 @@ async function startBot() {
 
   // =======================
   sock.ev.on('connection.update', (update) => {
-  const { connection, lastDisconnect } = update
-  console.log('📡 STATUS:', connection)
 
-    // =======================
-    // PAIRING FIX (ANTI FAIL)
-    if (connection === 'connecting') {
+    console.log('🧠 FULL UPDATE:', update)
 
-      if (!sock._pairingSent) {
-        sock._pairingSent = true
+    const { connection, lastDisconnect, qr } = update
+    console.log('📡 STATUS:', connection)
 
-        setTimeout(async () => {
-          try {
-            const phoneNumber = "6285772093943"
-
-            const code = await sock.requestPairingCode(phoneNumber)
-
-            console.log("🔥 PAIRING CODE:", code)
-
-          } catch (err) {
-            console.log("❌ Pairing error:", err)
-          }
-        }, 7000)
-      }
+    // QR LOGIN
+    if (qr) {
+      console.log('📱 SCAN QR:')
+      qrcode.generate(qr, { small: true })
     }
 
-    // =======================
+    // CONNECTED
     if (connection === 'open') {
       console.log('✅ BOT CONNECTED')
       startScheduler(sock)
     }
 
-    // =======================
+    // DISCONNECT
     if (connection === 'close') {
 
       const reconnect =
@@ -194,12 +199,19 @@ async function startBot() {
   })
 
   // =======================
+  // AUTO CHECK SOCKET
+  setInterval(() => {
+    if (sock?.ws?.readyState !== 1) {
+      console.log('⚠️ Socket not ready, reconnecting...')
+      startBot()
+    }
+  }, 20000)
+
+  // =======================
+  // MESSAGE
   sock.ev.on('messages.upsert', async (m) => {
 
-    console.log("📩 MESSAGE IN")
-
     try {
-
       const msg = m.messages?.[0]
       if (!msg || msg.key.fromMe) return
 
@@ -211,11 +223,11 @@ async function startBot() {
         msg.message?.imageMessage?.caption ||
         ''
 
-      console.log("📨 TEXT:", text)
+      console.log("📩", text)
 
-      if (text === 'Check') {
+      if (text.toLowerCase() === 'test') {
         return await sock.sendMessage(from, {
-          text: 'Alhamdulillah Sehat Pak Boss ✅'
+          text: 'Bot aktif ✅'
         })
       }
 
