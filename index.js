@@ -146,14 +146,8 @@ async function startBot() {
 
   // =======================
   sock.ev.on('connection.update', (update) => {
-  const { connection } = update
+  const { connection, lastDisconnect } = update
   console.log('📡 STATUS:', connection)
-
-  if (connection === 'open') {
-    console.log('✅ Bot connected!')
-    startScheduler(sock)
-  }
-})
 
     // =======================
     // PAIRING FIX (ANTI FAIL)
